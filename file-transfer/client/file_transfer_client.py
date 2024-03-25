@@ -1,0 +1,69 @@
+#! /usr/bin/env python3
+
+# File transfer client program
+
+import socket, sys, re, time
+sys.path.append("../lib")  # Adjust if necessary for your folder structure
+import params
+
+# Define client parameters
+switchesVarDefaults = (
+    (('-s', '--server'), 'server', "127.0.0.1:50001"),
+    (('-f', '--file'), 'filename', None),  # File to request
+    (('-?', '--usage'), "usage", False),   # boolean (set if present)
+)
+
+paramMap = params.parseParams(switchesVarDefaults)
+
+server, filename, usage = paramMap["server"], paramMap["filename"], paramMap["usage"]
+
+if usage or not filename:
+    params.usage()
+
+try:
+    serverHost, serverPort = re.split(":", server)
+    serverPort = int(serverPort)
+except:
+    print("Can't parse server:port from '%s'" % server)
+    sys.exit(1)
+
+# Create a socket and connect to the server
+s = None
+for res in socket.getaddrinfo(serverHost, serverPort, socket.AF_UNSPEC, socket.SOCK_STREAM):
+    af, socktype, proto, canonname, sa = res
+    try:
+        s = socket.socket(af, socktype, proto)
+        s.connect(sa)
+        break  # Successfully connected to the server
+    except socket.error as msg:
+        print(f"Error: {msg}")
+        if s:
+            s.close()
+        s = None
+        continue
+
+if s is None:
+    print('Could not open socket')
+    sys.exit(1)
+
+# Send the file request
+try:
+    s.sendall(f"{filename}\n".encode())  # File name followed by newline character
+except socket.error as msg:
+    print(f"Error sending data: {msg}")
+    s.close()
+    sys.exit(1)
+
+# Receive the file content
+try:
+    with open(f"received_{filename}", 'wb') as f:
+        while True:
+            data = s.recv(1024)
+            if not data:
+                break  # No more data from server
+            f.write(data)
+except socket.error as msg:
+    print(f"Error receiving data: {msg}")
+finally:
+    print(f"File transfer complete. File saved as 'received_{filename}'")
+    s.close()
